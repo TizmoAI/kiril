@@ -40,6 +40,8 @@ Stop with `docker compose down`. Logs: `docker compose logs -f backend worker`.
 | `TRANSCRIPTION_PROVIDER` | `groq` (default), `assemblyai` or `youtube_captions` |
 | `BACKEND_PLATFORM` | `linux/arm64` on Apple Silicon, `linux/amd64` otherwise |
 
+Social publishing is off by default. To try YouTube publishing locally, set `SOCIAL_PUBLISHING_ACCESS=all`, `YOUTUBE_OAUTH_CLIENT_ID` and `YOUTUBE_OAUTH_CLIENT_SECRET` in your `.env` and follow [docs/social-setup.md](docs/social-setup.md).
+
 See [docs/configuration.md](docs/configuration.md) for the full list and [docs/](docs/) for architecture, the editor and API reference.
 
 ## Tests
