@@ -15,6 +15,7 @@ import uuid
 
 from .caption_templates import get_template
 from .workflows.language import is_no_space
+from .media.aspect import blurred_fit_graph
 from .media.ffmpeg import ffmpeg_escape_filter_path, ffprobe_video_size
 from .media.source_limits import FPS_EPSILON, MAX_OUTPUT_FPS, probe_video_geometry
 from .video_utils import (
@@ -33,12 +34,17 @@ class ExportPreset:
     height: int
     video_bitrate: str
     audio_bitrate: str
+    # A clip of another ratio is shown whole over a blurred copy of itself
+    # instead of on black bars.
+    blur_fit: bool = False
 
 
 EXPORT_PRESETS = {
     "tiktok": ExportPreset("tiktok", 1080, 1920, "10M", "192k"),
     "reels": ExportPreset("reels", 1080, 1920, "12M", "192k"),
     "shorts": ExportPreset("shorts", 1080, 1920, "10M", "192k"),
+    "square": ExportPreset("square", 1080, 1080, "10M", "192k", blur_fit=True),
+    "landscape": ExportPreset("landscape", 1920, 1080, "12M", "192k", blur_fit=True),
 }
 
 
@@ -510,15 +516,17 @@ def export_with_preset(
         "setsar=1"
     )
     geometry = probe_video_geometry(input_path)
-    if geometry and geometry.fps is not None and geometry.fps > MAX_OUTPUT_FPS + FPS_EPSILON:
-        scale_filter = f"fps={MAX_OUTPUT_FPS},{scale_filter}"
+    cap_fps = bool(geometry and geometry.fps is not None and geometry.fps > MAX_OUTPUT_FPS + FPS_EPSILON)
+    video_args = ["-vf", f"fps={MAX_OUTPUT_FPS},{scale_filter}" if cap_fps else scale_filter]
+    if preset.blur_fit:
+        graph = blurred_fit_graph(preset.width, preset.height, source="[0:v]" + (f"fps={MAX_OUTPUT_FPS}," if cap_fps else ""))
+        video_args = ["-filter_complex", graph, "-map", "[vout]", "-map", "0:a?"]
     command = [
         "ffmpeg",
         "-y",
         "-i",
         str(input_path),
-        "-vf",
-        scale_filter,
+        *video_args,
         "-c:v",
         "libx264",
         "-preset",
