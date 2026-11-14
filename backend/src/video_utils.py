@@ -58,6 +58,14 @@ from .media.render_ranges import burned_hook_title, point_labels_for, resolve_re
 from .media.reframing import (
     render_reframed_clip_ffmpeg,
 )
+from .media.aspect import (
+    ASPECT_CAPTION_Y,
+    aspect_dimensions,
+    build_aspect_filter_plan,
+    caption_font_width,
+    is_aspect_format,
+    render_aspect_clip_ffmpeg,
+)
 from .media.source_captions import (
     band_through_full_height_crop,
     detect_burned_caption_band,
@@ -255,6 +263,14 @@ class VideoProcessor:
         return settings.get(target_quality, settings["high"])
 
 
+def aspect_font_kwargs(output_format: str, font_size: Optional[int], caption_template: str) -> Dict[str, Any]:
+    """Caption font size for 1:1 and 16:9 frames, scaled by the 1080 short side."""
+    if not is_aspect_format(output_format):
+        return {}
+    base = int(font_size) if font_size else int(get_template(caption_template)["font_size"])
+    return {"font_px_override": get_scaled_font_size(base, caption_font_width(output_format))}
+
+
 def create_optimized_clip(
     video_path: Path,
     start_time: float,
@@ -274,7 +290,8 @@ def create_optimized_clip(
     output_offsets: Optional[List[float]] = None,
     point_labels: Optional[List[Dict[str, Any]]] = None,
 ) -> bool:
-    """Create clip with optional subtitles. output_format: 'vertical' (9:16) or 'original' (keep source size).
+    """Create clip with optional subtitles. output_format: 'vertical' (9:16), 'square' (1:1),
+    'landscape' (16:9) or 'original' (keep source size).
 
     ``broll_overlays`` are stock cutaways (path, start, duration on the clip
     timeline) composited under the captions. If that render fails the clip is
@@ -401,6 +418,8 @@ def create_optimized_clip(
                     target_width, target_height = round_to_even(target_width), round_to_even(target_height)
                 else:
                     target_width, target_height = round_to_even(src_w), round_to_even(src_h)
+            elif is_aspect_format(reframe_format):
+                target_width, target_height = aspect_dimensions(reframe_format)
             else:
                 target_width, target_height = 1080, 1920
 
@@ -426,6 +445,15 @@ def create_optimized_clip(
                 except Exception as exc:
                     logger.warning("Vertical layout planning failed: %s", exc)
                     caption_y = None
+            aspect_plan = None
+            if is_aspect_format(reframe_format):
+                caption_y = ASPECT_CAPTION_Y[reframe_format]
+                try:
+                    aspect_plan = build_aspect_filter_plan(
+                        source_clip_path, src_w, src_h, reframe_format
+                    )
+                except Exception as exc:
+                    logger.warning("%s layout planning failed: %s", reframe_format, exc)
             if layout_report is not None and caption_y is not None:
                 layout_report["caption_y"] = caption_y
             if layout_report is not None and vertical_plan is not None:
@@ -452,7 +480,11 @@ def create_optimized_clip(
                     if source_caption_band and reframe_format != "original":
                         from .media.source_captions import detect_rendered_caption_band
                         from .media.reframing import caption_probe_plan
-                        probe_filter, probe_mode = caption_probe_plan(source_clip_path, reframe_format, vertical_plan)
+                        probe_filter, probe_mode = (
+                            aspect_plan
+                            if aspect_plan is not None
+                            else caption_probe_plan(source_clip_path, reframe_format, vertical_plan)
+                        )
                         source_caption_band = detect_rendered_caption_band(source_clip_path, probe_filter, probe_mode, ffprobe_duration(source_clip_path))
                 except Exception as exc:
                     logger.warning("Burned-in caption detection failed: %s", exc)
@@ -479,6 +511,7 @@ def create_optimized_clip(
                 position_y_override=caption_y,
                 avoid_band=source_caption_band,
                 caption_layout_report=layout_report,
+                **aspect_font_kwargs(reframe_format, font_size, caption_template),
                 **offsets_kwargs,
                 **labels_kwargs,
             ):
@@ -488,6 +521,16 @@ def create_optimized_clip(
                 )
 
             def render(overlays):
+                if is_aspect_format(reframe_format):
+                    return render_aspect_clip_ffmpeg(
+                        source_clip_path,
+                        final_clip_path,
+                        reframe_format,
+                        subtitle_ass_path=burn_ass_path,
+                        fonts_dir=fonts_dir,
+                        plan=aspect_plan,
+                        broll_overlays=overlays,
+                    )[0]
                 return render_reframed_clip_ffmpeg(
                     source_clip_path,
                     final_clip_path,

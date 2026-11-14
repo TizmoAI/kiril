@@ -852,18 +852,21 @@ async def prepare_editor(ctx, task_id: str, clip_id: str, filename: str):
             )
             duration = metadata["duration"]
             emphasis = generated_emphasis(words, task)
-            original_format = output_format == "original"
+            original_format = output_format in {"original", "landscape"}
+            square_format = output_format == "square"
             # Vertical clips are generated at 1080x1920; "original" keeps the source size.
             # A baked split or stack is already 1080x1920, so this vertical cover
             # shows that frame in full instead of cropping the source again.
             clip_width, clip_height = (
-                (metadata["width"], metadata["height"]) if original_format else (1080, 1920)
+                (metadata["width"], metadata["height"])
+                if original_format
+                else ((1080, 1080) if square_format else (1080, 1920))
             )
             initial = (
                 EditDocument.model_validate(
                     {
                         "segments": [{"id": "original", "start": 0, "end": duration}],
-                        "framing": {"aspect": "original" if original_format else "vertical", "fit": "auto" if metadata.get("hasLayout") else "cover"},
+                        "framing": {"aspect": "original" if original_format else ("square" if square_format else "vertical"), "fit": "auto" if metadata.get("hasLayout") else "cover"},
                         "captions": initial_caption_style(
                             task,
                             caption_settings,
