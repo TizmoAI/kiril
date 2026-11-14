@@ -211,6 +211,24 @@ CREATE TABLE api_keys (
     revoked_at TIMESTAMP WITH TIME ZONE
 );
 
+-- Saved brand templates: a caption style plus logo and intro/outro references
+-- that a task can start from.
+CREATE TABLE brand_templates (
+    id VARCHAR(36) PRIMARY KEY DEFAULT uuid_generate_v4()::text,
+    user_id VARCHAR(36) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name VARCHAR(120) NOT NULL,
+    caption_template VARCHAR(100),
+    font_family VARCHAR(255),
+    font_size INTEGER,
+    font_color VARCHAR(7),
+    logo_ref TEXT,
+    intro_ref TEXT,
+    outro_ref TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_brand_templates_user_id ON brand_templates(user_id);
+
 -- OAuth clients registered with the hosted MCP server (claude.ai, ChatGPT, ...).
 -- The access token a client receives is an API key above; no tokens are stored here.
 CREATE TABLE mcp_oauth_clients (
