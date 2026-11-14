@@ -375,6 +375,23 @@ Routes:
 - `POST /feedback`
   - Submit a feedback item, optionally routing it to configured webhook destinations
 
+## Brand Template Routes
+
+Saved caption style plus logo and intro/outro references, per user (up to 20).
+Authenticated by API key or signed session.
+
+| Route | Purpose |
+| --- | --- |
+| `GET /brand-templates/` | List the caller's templates |
+| `POST /brand-templates/` | Create: `name` plus any of `caption_template`, `font_family`, `font_size`, `font_color`, `logo_ref`, `intro_ref`, `outro_ref` |
+| `GET/PATCH/DELETE /brand-templates/{id}` | Read, change (send `null` to clear a field) or delete |
+
+`POST /tasks/` accepts `brand_template_id`. The template fills in every caption
+setting the request leaves out (`caption_template`, `font_options`); values in
+the request win. An unknown or foreign id returns 404 before any minutes are
+charged. `logo_ref`, `intro_ref` and `outro_ref` are stored references; they
+are not yet composited into rendered clips.
+
 ## Social Publishing Routes
 
 Source files:

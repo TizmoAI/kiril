@@ -27,6 +27,7 @@ from ... import clip_archive
 
 from ...repositories.generation_allowance_guard import generation_allowance_guard, GenerationAllowanceBusy
 from ...repositories.task_run_guard import task_run_guard, TaskRunBusy
+from ...repositories.brand_template_repository import BrandTemplateRepository
 from ...repositories.task_repository import TaskRepository
 from ...database import get_db
 from ...database import AsyncSessionLocal
@@ -605,6 +606,21 @@ async def _create_task(request: Request, db: AsyncSession, attempt: SourceAttemp
     font_size = _normalize_font_size(font_options.get("font_size"))
     font_color = _normalize_font_color(font_options.get("font_color"))
     caption_template = data.get("caption_template", "default")
+    brand_template_id = data.get("brand_template_id")
+    if brand_template_id is not None:
+        # A brand template fills in the caption settings the request leaves out.
+        brand = (
+            await BrandTemplateRepository.get(db, user_id, brand_template_id)
+            if isinstance(brand_template_id, str)
+            else None
+        )
+        if not brand:
+            raise HTTPException(status_code=404, detail="Brand template not found")
+        font_family = font_family or brand["font_family"]
+        font_size = font_size or brand["font_size"]
+        font_color = font_color or brand["font_color"]
+        if "caption_template" not in data and brand["caption_template"]:
+            caption_template = brand["caption_template"]
     include_broll = data.get("include_broll") is True
     runtime_config = get_config()
     processing_mode = data.get(
